@@ -1,6 +1,6 @@
 # Jenkins Pipeline Tutorial
 
-In this tutorial, you will get a step by step guide to create Jenkins pipelines for different project types (Python, Node.js, Java, etc.) and for mobile and web apps across different branches.
+In this tutorial, you will get a step by step guide to create Jenkins pipelines for different project types (Python, Node.js, Java) and for mobile and web apps across different branches.
 
 
 1. [Pipeline Overview](#pipeline-overview)
