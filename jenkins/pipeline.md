@@ -142,9 +142,8 @@ stage('Unit Testing'){
 }
 ```
 - To generate The Test results reports(XML, HTML) You need to:
-    1. `JUnit` and `PublishHTML` Plugins:
-        - Navigate to: Manage Jenkins > Manage Plugins > Available > Search "JUnit" and "PublishHTML"
-    2. Add `jest-html-reporter` and `jest-junit` to dependencies list in the package.json file
+    1. Add `jest-html-reporter` and `jest-junit` to dependencies list in the package.json file
+    2. Add reports config in jest.config.js file : 
     3. Add reports config in jest.config.js file : 
     ```js
     reporters: [
