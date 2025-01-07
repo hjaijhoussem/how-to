@@ -195,7 +195,6 @@ stage('Code Coverage'){
 <img src="image-7.png" width="400" height="170" alt="HTML Publisher Plugin"/>
 <img src="image-9.png" width="400" height="130" alt="Junit Plugin"/>
 **Syntax:**
-<img src="image-7.png" width="400" height="170" alt="HTML Publisher Plugin"/>
 
 ```groovy
 post{
