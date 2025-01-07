@@ -148,6 +148,7 @@ stage('Code Coverage'){
    - Navigate to: Manage Jenkins > Manage Plugins > Available > Search "HTML Publisher"
 **Syntax:**
 <img src="image-7.png" width="400" height="170" alt="HTML Publisher Plugin"/>
+
 ```groovy
 post{
     
@@ -165,6 +166,7 @@ post{
     
 }
 ```
+
 **Note:** syntax From "Pipeline Syntax" ->  "Snippet Generator" -> `publishHTML: Publish HTML reports`
  
 
