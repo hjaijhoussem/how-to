@@ -190,8 +190,8 @@ stage('Code Coverage'){
 ![alt text](image-1.png)
 **Prerequisites:**
 1. HTML Publisher and JUnit plugins
-   - Install "HTML Publisher" and "JUnit" from Jenkins Plugin Manager
-   - Navigate to: Manage Jenkins > Manage Plugins > Available > Search "HTML Publisher" and "JUnit"
+   - Install `HTML Publisher` and `JUnit` from Jenkins Plugin Manager
+   - Navigate to: Manage Jenkins > Manage Plugins > Available > Search `HTML Publisher` and `JUnit`
 <img src="image-7.png" width="400" height="170" alt="HTML Publisher Plugin"/>
 <img src="image-9.png" width="400" height="130" alt="Junit Plugin"/>
 **Syntax:**
