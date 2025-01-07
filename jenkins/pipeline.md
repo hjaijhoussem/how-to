@@ -1,5 +1,19 @@
 # Jenkins Pipeline Tutorial
 
+In this tutorial, you will get a step by step guide to create Jenkins pipelines for different project types (Python, Node.js, Java, etc.) and for mobile and web apps across different branches.
+
+
+1. [Pipeline Overview](#pipeline-overview)
+2. [Pipeline Syntax](#pipeline-syntax)
+3. [Continuos Integration](#continuos-integration)
+    1. [Buil/Install dependencies](#builinstall-dependencies)
+    2. [Dependency Check](#dependency-check)
+    3. [Unit Testing](#unit-testing)
+    4. [Code Coverage](#code-coverage)
+5. [Continuos Deployment](#continuos-deployment)
+6. [Continuos Delivery](#continuos-delivery)
+7. [Post build](#post-build)
+
 ## Pipeline Overview 
 ![alt text](image-5.png)
 
@@ -119,6 +133,40 @@ You can find this syntax in the **pipeline syntax generator**, search for **depe
 
 Note: The **OWASP Dependency Check** will take too much time (~28 minutes). This can be avoided if you provide a dependency database key.
 ### Unit Testing
+#### Node.js Project
+```groovy
+stage('Unit Testing'){
+    steps{
+        sh 'npm test'// NPM test command need to be added in the package.json file
+    }
+}
+```
+- To generate The Test results reports(XML, HTML) You need to:
+    1. `JUnit` and `PublishHTML` Plugins:
+        - Navigate to: Manage Jenkins > Manage Plugins > Available > Search "JUnit" and "PublishHTML"
+    2. Add `jest-html-reporter` and `jest-junit` to dependencies list in the package.json file
+    3. Add reports config in jest.config.js file : 
+    ```js
+    reporters: [
+        'default',
+        ['./node_modules/jest-html-reporter', {
+            'pageTitle': 'Jest Test Report',
+            'outputPath': 'jest-test-report.html',
+            'includeFailureMsg': false
+        }],
+        ['./node_modules/jest-junit', {
+            'suiteName': 'jest tests',
+            'outputDirectory': '.',
+            'outputName': 'test-results.xml',
+            'uniqueOutputName': 'false',
+            'classNameTemplate': '{classname}-{title}',
+            'titleTemplate': '{classname}-{title}',
+            'ancestorSeparator': ' › ',
+            'usePathForSuiteName': 'true'
+        }]
+    ]
+    ```
+
 ### Code Coverage
 ```groovy
 stage('Code Coverage'){
