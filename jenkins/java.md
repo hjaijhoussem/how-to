@@ -11,7 +11,7 @@ In this tutorial, you will get a step by step guide to create Jenkins pipelines 
 
 
 ## Continuos Integration
-![alt text](image.png)
+![alt text](images/image.png)
 ### Build and Push To Registry
 #### Github package Registry
 **Docker Images**
@@ -124,7 +124,6 @@ pipeline {
     
     post {
         always {
-            cleanWs()
             sh 'rm -f settings.xml'
             sh 'docker logout ${REGISTRY_URL}'
         }
@@ -134,13 +133,13 @@ pipeline {
 #### Nexus Registry
 
 ## Post build
-![alt text](image-1.png)
+![alt text](images/image-1.png)
 **Prerequisites:**
 1. HTML Publisher and JUnit plugins
    - Install "HTML Publisher" and "JUnit" from Jenkins Plugin Manager
    - Navigate to: Manage Jenkins > Manage Plugins > Available > Search "HTML Publisher" and "JUnit"
-<img src="image-7.png" width="400" height="170" alt="HTML Publisher Plugin"/>
-<img src="image-9.png" width="400" height="130" alt="Junit Plugin"/>
+<img src="images/image-7.png" width="400" height="170" alt="HTML Publisher Plugin"/>
+<img src="images/image-9.png" width="400" height="130" alt="Junit Plugin"/>
 
 **Syntax:**
 ```groovy

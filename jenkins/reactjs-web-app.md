@@ -8,18 +8,22 @@ In this tutorial, you will get a step by step guide to create Jenkins pipelines 
     2. [Dependency Check](#dependency-check)
     3. [Unit Testing](#unit-testing)
     4. [Code Coverage](#code-coverage)
+    5. [Build](#build)
+    6. [Trivy vulnerability scanner](#trivy-vulnerability-scanner)
+    7. [Push To Registry](#push-to-registry)
 3. [Continuos Deployment](#continuos-deployment)
+    1. [Integration Test](#integration-test)
 4. [Continuos Delivery](#continuos-delivery)
 5. [Post build](#post-build)
 6. [Best Practices](#best-practices)
 
 ## Pipeline Overview 
-![alt text](image-5.png)
+![alt text](images/image-5.png)
 
 
 
 ## Continuos Integration
-![alt text](image.png)
+![alt text](images/image.png)
 ### Buil/Install dependencies
 **Prerequisites:**
 1. NodeJS Plugin
@@ -59,7 +63,7 @@ pipeline {
 OWASP Dependency-Check Plugin
 
 <p align="center">
-    <img src="image-6.png" width="400" height="170" alt="OWASP Dependency Check Plugin"/>
+    <img src="images/image-6.png" width="400" height="170" alt="OWASP Dependency Check Plugin"/>
 </p>
 
 2. Dependency-check Tool Configuration
@@ -132,12 +136,12 @@ stage('Code Coverage'){
 - The `CatchError` block will prevent the pipeline from failing if the `sh 'npm run coverage'` command fails.
 - A Folder named `coverage` will be created in the workspace and the coverage report will be saved in it.
 <p align="center">
-    <img src="image-8.png" width="350" height="170" alt="HTML Publisher Plugin"/>
+    <img src="images/image-8.png" width="350" height="170" alt="HTML Publisher Plugin"/>
 </p>
 
 - The Coverage file report will be saved in the `lcov-report` folder under the name `index.html`.
 
-### Build and Push To Registry
+### Build
 #### Github package Registry
 **Docker Images**
 
@@ -167,32 +171,97 @@ pipeline {
                 sh "docker build -t ${DOCKER_IMAGE_NAME} ."
             }
         }
-        stage('Push Docker Image') {
-                    steps {
-                        sh """
-                            docker tag ${DOCKER_IMAGE_NAME} ${REGISTRY_URL}/${REGISTRY_REPO}/${DOCKER_IMAGE_NAME}
-                            docker push ${REGISTRY_URL}/${REGISTRY_REPO}/${DOCKER_IMAGE_NAME}
-                        """
-                    }
-                }
-
     }
 }
 ```
+### Trivy vulnerability scanner
+```groovy
+stage('Trivy vulnerability scanner'){
+    steps{
+        // Scan and report LOW, MEDIUM and HIGH severity without failing the build
+        sh '''
+            trivy image ${REGISTRY_URL}/${REGISTRY_REPO}/${DOCKER_IMAGE_NAME} \
+            --severity LOW,MEDIUM,HIGH \
+            --exit-code 0 \
+            --quiet \ # Suppress output to the console
+            --format json -o trivy-image-MEDUIM-results.json
+        '''
+        // Scan and report CRITICAL severity and fail the build if a critical vunerability exist
+        sh '''
+            trivy image ${REGISTRY_URL}/${REGISTRY_REPO}/${DOCKER_IMAGE_NAME} \
+            --severity CRITICAL \
+            --exit-code 1 \
+            --quiet \ # Suppress output to the console
+            --format json -o trivy-image-CRITICAL-results.json
+        '''
+    }
+    post{
+        always {
+            // Convert Trivy JSON reports to JUnit XML and HTML
+            sh '''
+                # Convert LOW,MEDIUM results to JUnit XML and HTML
 
+                trivy convert --format template --template "@/usr/local/share/trivy/templates/junit.tpl" \
+                --input trivy-image-MEDUIM-results.json --output trivy-junit-MEDUIM-report.xml
+                
+                trivy convert --format template --template "@/usr/local/share/trivy/templates/html.tpl" \
+                --input trivy-image-MEDUIM-results.json --output trivy-MEDUIM-report.html
+                
+                # Convert HIGH,CRITICAL results to XML and HTML
 
+                trivy convert --format template --template "@/usr/local/share/trivy/templates/junit.tpl" \
+                --input trivy-image-CRITICAL-results.json --output trivy-junit-CRITICAL-report.xml
+
+                trivy convert --format template --template "@/usr/local/share/trivy/templates/html.tpl" \
+                --input trivy-image-CRITICAL-results.json --output trivy-CRITICAL-report.html
+            '''
+        }
+    }
+}
+```
+### Push To Registry
+#### Github package Registry
+```groovy
+        stage('Push Docker Image') {
+            steps {
+                sh """
+                    docker tag ${DOCKER_IMAGE_NAME} ${REGISTRY_URL}/${REGISTRY_REPO}/${DOCKER_IMAGE_NAME}
+                    docker push ${REGISTRY_URL}/${REGISTRY_REPO}/${DOCKER_IMAGE_NAME}
+                """
+            }
+        }
+```
 ## Continuos Deployment
-![alt text](image-2.png)
+![alt text](images/image-2.png)
+### Integration Test
+```groovy
+    stage('Integration Test'){
+        environment{
+            DOCKER_CONTAINER_NAME = 'car-pooling-be'
+        }
+        steps{
+            sh '''
+                if docker ps -a | grep ${DOCKER_CONTAINER_NAME}; then
+                    echo "Container ${DOCKER_CONTAINER_NAME} found, Stopping..."
+                    docker stop ${DOCKER_CONTAINER_NAME}
+                    docker rm ${DOCKER_CONTAINER_NAME}
+                fi
+                echo "Starting ${DOCKER_CONTAINER_NAME}..."
+                docker run -d --name ${DOCKER_CONTAINER_NAME} ${REGISTRY_URL}/${REGISTRY_REPO}/${DOCKER_IMAGE_NAME}
+            '''
+        }
+    }
+```
 ## Continuos Delivery
-![alt text](image-4.png)
+![alt text](images/image-4.png)
 ## Post build
-![alt text](image-1.png)
+![alt text](images/image-1.png)
 **Prerequisites:**
 1. HTML Publisher and JUnit plugins
    - Install "HTML Publisher" and "JUnit" from Jenkins Plugin Manager
    - Navigate to: Manage Jenkins > Manage Plugins > Available > Search "HTML Publisher" and "JUnit"
-<img src="image-7.png" width="400" height="170" alt="HTML Publisher Plugin"/>
-<img src="image-9.png" width="400" height="130" alt="Junit Plugin"/>
+<img src="images/image-7.png" width="400" height="170" alt="HTML Publisher Plugin"/>
+<img src="images/image-9.png" width="400" height="130" alt="Junit Plugin"/>
 
 **Syntax:**
 ```groovy
@@ -208,6 +277,15 @@ post{
 
     // Publish Code Coverage Report
     publishHTML([allowMissing: true, alwaysLinkToLastBuild: true, keepAll: true, reportDir: './coverage/lcov-report', reportFiles: 'index.html', reportName: 'Code Coverage HTML Report', reportTitles: '', useWrapperFileDirectly: true])
+
+    // Publish Trivy Reports
+    publishHTML([allowMissing: true, alwaysLinkToLastBuild: true, keepAll: true, reportDir: './', reportFiles: 'trivy-MEDUIM-report.html', reportName: 'Trivy MEDUIM Report', reportTitles: '', useWrapperFileDirectly: true])
+
+    publishHTML([allowMissing: true, alwaysLinkToLastBuild: true, keepAll: true, reportDir: './', reportFiles: 'trivy-CRITICAL-report.html', reportName: 'Trivy CRITICAL Report', reportTitles: '', useWrapperFileDirectly: true])
+
+    junit allowEmptyResults: true, stdioRetention: '', testResults: 'trivy-junit-MEDUIM-report.xml'
+
+    junit allowEmptyResults: true, stdioRetention: '', testResults: 'trivy-junit-CRITICAL-report.xml'
 
     
 }
