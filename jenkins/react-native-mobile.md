@@ -8,6 +8,7 @@ In this tutorial, you will get a step by step guide to create Jenkins pipelines 
     3. [Code Coverage](#code-coverage)
     4. [Android SDK setup](#android-sdk-setup)
     5. [Generate APK](#generate-apk)
+    6. [Upload APK to Nexus](#upload-apk-to-nexus)
 5. [Post build](#post-build)
 
 
@@ -110,7 +111,7 @@ stage('Code Coverage'){
 - The `CatchError` block will prevent the pipeline from failing if the `sh 'npm run coverage'` command fails.
 - A Folder named `coverage` will be created in the workspace and the coverage report will be saved in it.
 <p align="center">
-    <img src="image-8.png" width="350" height="170" alt="HTML Publisher Plugin"/>
+    <img src="images/image-8.png" width="350" height="170" alt="HTML Publisher Plugin"/>
 </p>
 
 - The Coverage file report will be saved in the `lcov-report` folder under the name `index.html`.
@@ -212,14 +213,79 @@ stage('Generate APK') {
     }
 }
 ```
+
+### Upload APK to Nexus
+**Prerequisites:**
+1. Nexus Artifact Uploader Plugin
+   - Install `Nexus Artifact Uploader` from Jenkins Plugin Manager
+   - Navigate to: Manage Jenkins > Manage Plugins > Available > Search `Nexus Artifact Uploader`
+    ![alt text](image.png)
+2. Maver2 repository in Nexus
+    - Create a repository named `apk-android` in Nexus
+    - Navigate to: Nexus > Repositories > Create repository
+    - Select `Maven2 (hosted)`
+    - Name: `apk-android`
+    - Deploy Policy: `Allow Redeploy`
+    - Save
+3. Nexus Role for Jenkins
+    - Create a role named `Jenkins` in Nexus
+    - Navigate to: Nexus > Security > Roles > Create role
+    - Name: `Jenkins`
+    - Permissions: `nx-repository-view-maven2-*-*`
+    - Save
+4. Nexus User for Jenkins
+    - Create a user named `Jenkins` in Nexus
+    - Navigate to: Nexus > Security > Users > Create user
+    - Name: `Jenkins`
+    - Password: `Jenkins`
+    - Roles: `Jenkins`
+    - Save
+5. Nexus Credentials for Jenkins
+    - Navigate to: Manage Jenkins > Manage Credentials
+    - Add a new credential
+    - Kind: `Username with password`
+    - Username: `Jenkins`
+    - Password: `Jenkins`
+    - ID: `nexus`
+    - Save
+
+
+**Syntax:**
+```groovy
+stage('Upload APK to Nexus') {
+            environment {
+                NEXUS_URL = 'nexus:8081'
+                NEXUS_REPOSITORY = 'apk-android'
+                NEXUS_CREDENTIALS_ID = 'nexus'
+                APK_FILE = "android/app/build/outputs/apk/release/${env.APK_NAME}"
+                GROUP_ID = 'com.mobile'
+                ARTIFACT_ID = 'HippoShopping'
+                VERSION = "-${CURRENT_DATE}"
+            }
+            steps {
+                nexusArtifactUploader artifacts: [[artifactId: ARTIFACT_ID,
+                                                    classifier: '',
+                                                    file: APK_FILE,
+                                                    type: 'apk']],
+                                    credentialsId: NEXUS_CREDENTIALS_ID,
+                                    groupId: GROUP_ID,
+                                    nexusUrl: NEXUS_URL,
+                                    nexusVersion: 'nexus3',
+                                    protocol: 'http',
+                                    repository: NEXUS_REPOSITORY,
+                                    version: VERSION
+            }
+        }
+```
+
 ## Post build
-![alt text](image-1.png)
+![alt text](images/image-1.png)
 **Prerequisites:**
 1. HTML Publisher and JUnit plugins
    - Install "HTML Publisher" and "JUnit" from Jenkins Plugin Manager
    - Navigate to: Manage Jenkins > Manage Plugins > Available > Search "HTML Publisher" and "JUnit"
-<img src="image-7.png" width="400" height="170" alt="HTML Publisher Plugin"/>
-<img src="image-9.png" width="400" height="130" alt="Junit Plugin"/>
+<img src="images/image-7.png" width="400" height="170" alt="HTML Publisher Plugin"/>
+<img src="images/image-9.png" width="400" height="130" alt="Junit Plugin"/>
 
 **Syntax:**
 ```groovy
@@ -228,7 +294,7 @@ post{
         junit allowEmptyResults: true, stdioRetention: '', testResults: 'test-results.xml'                   
         publishHTML([allowMissing: true, alwaysLinkToLastBuild: true, keepAll: true, reportDir: '', reportFiles: 'jest-test-report.html', reportName: 'Jest TestHTML Report', reportTitles: '', useWrapperFileDirectly: true])
 
-        // Publish Code Coverage Report
+        # Publish Code Coverage Report
         publishHTML([allowMissing: true, alwaysLinkToLastBuild: true, keepAll: true, reportDir: './coverage/lcov-report', reportFiles: 'index.html', reportName: 'Code Coverage HTML Report', reportTitles: '', useWrapperFileDirectly: true])
     }  
 }
