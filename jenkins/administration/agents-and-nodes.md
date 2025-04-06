@@ -137,15 +137,6 @@ options{
         - **Note**: By default, It uses the TCP (jnlp) connection, if this Type of connection is disabled it will show a warning under `Websocket` and `Direct Connection` Checkbox.
         - Additional Config: you can specify also the 
             - Jenkins URL, Jenkins Tunnel (Port), Pod Labels (key-value pairs), Pod Retention
-        - Click Save.
-
-   - **Launch method**: "Launch agent by connecting it to the controller"
-   - **Availability**: "Keep this agent online as much as possible"
-   - **Disk space monitoring**:
-     - Free Disk Space Threshold: 1GiB
-     - Free Disk Space Warning Threshold: 2GiB
-     - Free Temp Space Threshold: 1GiB
-     - Free Temp Space Warning Threshold: 2GiB
 4. Click **Save**
 ### Utilize Kubernetes Pod as Agent
 Setup Pod Agent tempalte methods:
