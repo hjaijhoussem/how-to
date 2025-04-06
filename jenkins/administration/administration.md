@@ -1,7 +1,14 @@
 # Jenkins Administration
 
-1. [Recovery and Rollback](#recovery-and-rollback)
+1. [Shared library](#shared-library)
+    1. [Folder structure](#folder-structure)
+2. [Recovery and Rollback](#recovery-and-rollback)
     1. [Rollback Job and system configuration](#rollback-job-and-system-configuration)
+
+
+## Shared library
+## Folder structure
+The Jenkins shared library follows a specific directory structure that helps organize your code effectively:
 
 
 ## Recovery and Rollback
