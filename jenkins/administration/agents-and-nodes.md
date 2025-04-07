@@ -165,10 +165,11 @@ agent {
 ```
 **Note:** if you don't specify the cloud parameter, jenkins will use the first available kubernetes cloud.
 
-**Tip**: Use the "Pipeline Syntax" generator in Jenkins to create more advanced Kubernetes agent configurations. Go to your pipeline job and click on "Pipeline Syntax" and search for "Kubernetes".
+**Tip:** Use the "Pipeline Syntax" generator in Jenkins to create more advanced Kubernetes agent configurations. Go to your pipeline job and click on "Pipeline Syntax" and search for "Kubernetes".
 
 **Multiple Containers:**
-If you need different containers in the pipeline, all you need to do is:
+In pod definition you can define multiple containers, and this containers shares the same volume by default
+so all dependencies installed and files created in a container their are accessible by the other container, all you need to do is:
 1. Add The containers descriptions in Pod Template: 
 ```groovy
 agent {
@@ -207,6 +208,39 @@ stage {
     }
 }
 ```
+**Tip:** Instead of hard-coding the pod definition in jenkinsfile, it possible to define it in a yaml file and reference it in pod agent definition,
+example:
+```yaml
+apiVersion: v1
+kind: Pod
+spec:
+    containers:
+    - name: ubuntu-container
+    image: ubuntu
+    command:
+    - sleep
+    args:
+    - infinity
+    - name: maven-container
+    image: maven:3.8.6-openjdk-11-slim
+    command:
+    - sleep
+    args:
+    - infinity
+```
+
+```groovy
+agent {
+    kubernetes {
+        cloud '<name-of-created-kubernetes-cloud>'
+        yamlFile 'k8s-agent.yaml'
+        defaultContainer 'ubuntu-container'
+        retries 2
+    }
+}
+```
+
+
 ## Best Practices
 - **Use descriptive labels** to target the right agents for your jobs
 - **Implement proper cleanup** for cloud and container agents
