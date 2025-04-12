@@ -21,6 +21,23 @@ While the Jenkins home directory contains all data, focusing on critical compone
 - **Plugins (`plugins/` folder)**: Not mandatory for backup as plugins can be reinstalled, consider instead backing up `plugins.txt` for version control.
 - **User Content (`userContent/` folder)**: Custom static resources.
 
+## Effective Jenkins backup strategy
+
+<p align="center">
+    <img src="../images/jenkins-backup-strategy.png"  alt="Jenkins Home directory"/>
+</p>
+
+When it comes to backing up Jenkins, there are three primary methods to consider: 
+- **File System Snapshots**
+- **Backup plugins** (ThinBackup is the only actively maintained option)
+- **Manual Scripting** 
+
+Combining them creates the most robust backup strategy. 
+
+### Recommended Practices 
+- Always consider to maintain local backups for quick recovery and send backup copies to remote hosts for disaster recovery. 
+- Consider implementing a rotation policy to balance storage requirements with recovery needs, keeping recent backups on faster storage and older backups on archival storage. 
+
 ## Thinbackup plugin
 
 The ThinBackup plugin provides an automated solution for Jenkins backup and restoration, offering both full and differential backup options to efficiently manage backup storage.
@@ -86,3 +103,4 @@ Navigate to **Manage Jenkins** > **System** and locate the ThinBackup section:
 5. Restart Jenkins:  `<jenkins-url>/restart`
 
 You can view the backup logs in Manage Jenkins > System logs > All Jenkins logs 
+
