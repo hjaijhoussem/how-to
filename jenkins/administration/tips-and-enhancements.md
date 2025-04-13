@@ -1,7 +1,7 @@
 # Tips and Enhacements for Pipeline Optimazation
 
-[Stash and Unstash](#stash-and-unstash)
-[Pipeline Caching](#pipeline-caching)
+1. [Stash and Unstash](#stash-and-unstash)
+2. [Pipeline Caching](#pipeline-caching)
 
 ## Stash and Unstash
 
