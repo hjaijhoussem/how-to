@@ -21,17 +21,17 @@
 8. Vulnerability scan (Trivy)
 9. Push image to registry
 ### Continuos Deployment
-1. AWS EC2 VM Deploy
-2. Integration Testing
+1. AWS EC2 VM Deploy ( [AWS EC2 VM Deploy](#aws-ec2-vm-deploy) )
+2. Integration Testing ( [Integration Testing](#integration-testing) )
 3. Raise PR to main branch
 ### Contiuos Delivery
 1. Update Docker image Tags (Triggered by the PR raised on main)
 2. Deploy to Kubernetes (GitOps - ArgoCD) (Triggered by the PR raised on main)
 3. Dynamic Application Security Testion DAST (OWASP ZAP) (Triggered by the PR raised on main), If passed, Merge The PR to main
 4. Approval Stage
-5. AWS Lambda Deploy, Update Lambda Configurations
-6. AWS Lambda Invocation/Testing
-### Post Build
+5. AWS Lambda Deploy, Update Lambda Configurations ( [AWS Lambda Deploy, Update Lambda Configurations](#aws-lambda-deploy-update-lambda-configurations) ) 
+6. AWS Lambda Invocation/Testing ( [AWS Lambda Invocation/Testing](#aws-lambda-invocationtesting) )
+### Post Build 
 **Archiving Reports:**
 - Unit Test Reports
 - Coverage Reports
@@ -43,6 +43,148 @@
 - Publish to AWS S3
 
 **Slack Notifications for All States and Stages**
+## AWS EC2 VM Deploy 
+
+This section explains how to deploy your React application to an AWS EC2 instance using Jenkins pipeline.
+
+### Prerequisites
+
+- **AWS Steps Plugin**: Install this Jenkins plugin to interact with AWS services.
+  <p align="center">
+    <img src="../images/aws-steps-plugin.png" alt="AWS Steps Plugin"/>
+  </p>
+
+### Configuration Steps
+
+#### 1. Setup AWS Credentials
+
+1. Navigate to **Manage Jenkins > Credentials > Add Credentials**
+2. Select **AWS Credentials** and configure:
+   - **Scope**: Global
+   - **ID**: `aws-s3-ec2-lambda` (or your preferred ID)
+   - **Description**: `AWS credentials for EC2 deployment`
+   - **Access Key ID**: Your AWS access key
+   - **Secret Access Key**: Your AWS secret key
+3. Click **Create**
+
+A success message will appear if credentials are valid: "These credentials are valid and have access to X availability zones"
+
+#### 2. Configure SSH Connection
+
+1. Install the **SSH Agent** plugin in Jenkins
+2. Navigate to **Manage Jenkins > Credentials > Add Credentials**
+3. Select **SSH Username with private key** and configure:
+   - **Scope**: Global
+   - **ID**: `aws-dev-deploy-ec2-instance` (or your preferred ID)
+   - **Description**: `SSH connection for EC2 deployment`
+   - **Username**: `ubuntu` (or your EC2 instance username)
+   - **Private key**: Select **Enter directly** and paste your SSH private key
+   - **Passphrase**: Enter if your key has one, otherwise leave blank
+4. Click **Create**
+
+### Pipeline Stage
+
+Add this stage to your Jenkinsfile to deploy your React application to EC2:
+
+```groovy
+stage('Deploy - EC2 instance') {
+    steps {
+        sshagent(['aws-dev-deploy-ec2-instance']) {
+            sh '''
+                ssh -o StrictHostKeyChecking=no ubuntu@3.140.244.188 "
+                    # Check if container exists and remove if found
+                    if sudo docker ps -a | grep -q "solar-system"; then
+                        echo "Container found. Stopping and removing..."
+                        sudo docker stop "solar-system" && sudo docker rm "solar-system"
+                    fi
+                    
+                    # Deploy application using Docker
+                    sudo docker run --name solar-system \
+                        -e MONGO_URI=$MONGO_URI \
+                        -e MONGO_USERNAME=$MONGO_USERNAME \
+                        -e MONGO_PASSWORD=$MONGO_PASSWORD \
+                        -p 3000:3000 -d hjaiej/solar-system:$GIT_COMMIT
+                "
+            '''
+        }
+    }
+}
+```
+
+## Integration Testing
+
+After deploying your application to EC2, it's important to verify it works correctly by running integration tests.
+
+### Test Script
+
+Create a shell script named `integration-testing-ec2.sh` with the following content:
+
+```shell
+#!/bin/bash
+
+echo "Starting integration tests for EC2 deployment..."
+
+# Verify AWS CLI is installed
+aws --version
+
+# Get EC2 instance details
+DATA=$(aws ec2 describe-instances)
+echo "EC2 instance data retrieved"
+
+# Find our deployment instance by tag
+URL=$(aws ec2 describe-instances | jq -r '.Reservations[].Instances[] | select(.Tags[].Value == "dev-deploy") | .PublicDnsName')
+echo "Target EC2 instance: $URL"
+
+if [[ -n "$URL" ]]; then
+    # Test 1: Health check endpoint
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" "http://$URL:3000/live")
+    echo "Health check response code: $http_code"
+    
+    # Test 2: API endpoint test
+    planet_data=$(curl -XPOST "http://$URL:3000/planet" -H "Content-Type: application/json" -d '{"id": "3"}')
+    echo "Planet API response: $planet_data"
+    
+    # Extract planet name from response
+    planet_name=$(echo $planet_data | jq .name -r)
+    echo "Retrieved planet name: $planet_name"
+    
+    # Verify test results
+    if [[ "$http_code" -eq 200 && "$planet_name" == "Earth" ]]; then
+        echo "✅ All integration tests PASSED"
+    else
+        echo "❌ One or more tests FAILED"
+        exit 1
+    fi
+else
+    echo "❌ ERROR: Could not retrieve EC2 instance URL"
+    exit 1
+fi
+```
+
+> **Note**: This script requires the AWS CLI and jq to be installed in your Jenkins environment.
+
+### Pipeline Stage
+
+Add this stage to your Jenkinsfile to run the integration tests:
+
+```groovy
+stage('Integration Testing - AWS EC2') {
+    when {
+        branch 'feature/*'  // Only run on feature branches
+    }
+    steps {
+        // Display current branch for debugging
+        sh 'printenv | grep -i branch'
+        
+        // Run integration tests with AWS credentials
+        withAWS(credentials: 'aws-s3-ec2-instance-creds', region: 'us-east-2') {
+            sh 'bash integration-testing-ec2.sh'
+        }
+    }
+}
+```
+
+This stage will run automatically for feature branches, ensuring your application works correctly on the EC2 instance before proceeding with further pipeline stages.
 
 ## kubernetes and GitOPS
 ### K8s basics 
@@ -267,3 +409,128 @@ ZAP can be used in various ways, in this guide we will use the Docker approach, 
  }
  ```
  **Note**: the */api-docs/* its a jsob documentation not the UI documentation
+
+## AWS Lambda Deploy, Update Lambda Configurations
+
+This section explains how to deploy your React application to AWS Lambda for serverless hosting.
+
+### Overview
+
+The Lambda deployment process:
+1. Modifies your application code for serverless execution
+2. Packages the application as a ZIP file
+3. Uploads the package to S3
+4. Updates Lambda configuration with environment variables
+5. Updates the Lambda function code with the new package
+
+### Pipeline Stage
+
+Add this stage to your Jenkinsfile to deploy your React application to AWS Lambda:
+
+```groovy
+stage('Lambda - S3 Upload & Deploy') {
+    when {
+        branch 'main'  // Only execute on main branch
+    }
+    steps {
+        withAWS(credentials: 'aws-s3-ec2-lambda-creds', region: 'us-east-2') {
+            // Step 1: Modify code for serverless execution
+            sh '''
+                # View original code structure
+                tail -5 app.js
+                
+                # Comment out server listening code (not needed in Lambda)
+                sed -i "/^app\\.listen(3000/ s/^/\\/\\//)" app.js
+                
+                # Enable Lambda handler exports
+                sed -i "s|^//module.exports = app;/\\/\\/module.exports = app;/g" app.js
+                sed -i "s|^//module.exports.handler|module.exports.handler|" app.js
+                
+                # Verify changes
+                tail -5 app.js
+            '''
+            
+            // Step 2: Create deployment package
+            sh """
+                # Create ZIP file with all necessary files
+                zip -qr solar-system-lambda-${BUILD_ID}.zip app* package* index.html node_modules
+                
+                # Verify ZIP file was created
+                ls -ltr solar-system-lambda-${BUILD_ID}.zip
+            """
+            
+            // Step 3: Upload package to S3 bucket
+            s3Upload(
+                file: "solar-system-lambda-${BUILD_ID}.zip",
+                bucket: 'solar-system-lambda-bucket'
+            )
+            
+            // Step 4: Update Lambda environment variables
+            sh '''
+                aws lambda update-function-configuration \
+                    --function-name solar-system-function \
+                    --environment '{"Variables":{
+                        "MONGO_USERNAME": "${MONGO_USERNAME}",
+                        "MONGO_PASSWORD": "${MONGO_PASSWORD}", 
+                        "MONGO_URI": "${MONGO_URI}"
+                    }}'
+            '''
+            
+            // Step 5: Update Lambda function code
+            sh '''
+                aws lambda update-function-code \
+                    --function-name solar-system-function \
+                    --s3-bucket solar-system-lambda-bucket \
+                    --s3-key solar-system-lambda-${BUILD_ID}.zip
+            '''
+        }
+    }
+}
+```
+
+## AWS Lambda Invocation/Testing
+
+After deploying to Lambda, it's crucial to verify that the function is working correctly.
+
+### Testing Strategy
+
+This stage:
+1. Waits for Lambda deployment to complete
+2. Retrieves the Lambda function URL
+3. Performs a health check on the `/live` endpoint
+4. Verifies that the application is responding correctly
+
+### Pipeline Stage
+
+Add this stage to your Jenkinsfile to test your Lambda deployment:
+
+```groovy
+stage('Lambda - Invoke Function') {
+    when {
+        branch 'main'  // Only execute on main branch
+    }
+    steps {
+        withAWS(credentials: 'aws-s3-ec2-lambda-creds', region: 'us-east-2') {
+            sh '''
+                # Allow time for Lambda deployment to complete
+                echo "Waiting for Lambda deployment to complete..."
+                sleep 30s
+                
+                # Get the Lambda function URL
+                function_url_data=$(aws lambda get-function-url-config --function-name solar-system-function)
+                function_url=$(echo $function_url_data | jq -r '.FunctionUrl | sub("/$"; "")')
+                echo "Lambda function URL: $function_url"
+                
+                # Test the function's health endpoint
+                echo "Testing Lambda function health..."
+                curl -Is $function_url/live | grep -i "200 OK"
+                
+                # If the grep command succeeds, the test passed
+                echo "✅ Lambda function test PASSED"
+            '''
+        }
+    }
+}
+```
+
+> **Note**: This stage requires the AWS CLI and jq to be installed in your Jenkins environment.
