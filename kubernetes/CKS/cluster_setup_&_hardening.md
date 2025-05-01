@@ -2,6 +2,9 @@
 
 1. [CIS Benchmark and Kube-bench](#cis-benchmark)
 2. [Security Primitives](#security-primitives)
+   1. [Authentication in Kubernetes](#authentication-in-kubernetes)
+      1. [Users (Admins, Developers)](#users-admins-developers)
+      2. [Service Accounts](#service-accounts)
 
 ## CIS Benchmark
 The Center for Internet Security (CIS) Kubernetes Benchmark provides security recommendations for configuring Kubernetes clusters. This guide helps you implement these recommendations using kube-bench.
