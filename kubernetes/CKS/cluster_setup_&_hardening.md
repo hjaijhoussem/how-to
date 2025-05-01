@@ -86,7 +86,11 @@ After implementing the recommended changes, re-run kube-bench to verify that all
 
 ### Authentication in Kubernetes
 
-The `kube-apiserver` acts as the gatekeeper for all access to the Kubernetes cluster, verifying user identity before processing any requests. Users (administrators, developers, etc.) can connect to the cluster either via kubectl or by directly accessing the API.
+The `kube-apiserver` functions as the security gatekeeper for the Kubernetes cluster, validating all identities before processing requests. This authentication applies to both human users (administrators, developers) connecting through kubectl or direct API access, and to internal workloads accessing cluster resources through service accounts. All cluster interactions must pass through this authentication layer regardless of origin.
+
+![K8s Service Account vs Users](../images/serviceaccount-users-k8s.png)
+
+### Users (Admins, Developers)
 
 #### Available Authentication Methods
 
@@ -220,7 +224,6 @@ Similar to password file, but uses tokens instead of passwords:
    ```bash
    curl -v -k https://localhost:6443/api/v1/pods -u "user1:password123"
    ```
-
 ### Best Practices
 
 - **Avoid Static Files**: Do not use static password/token files in production environments
@@ -228,3 +231,113 @@ Similar to password file, but uses tokens instead of passwords:
 - **Use Identity Providers**: For larger deployments, integrate with external identity providers
 - **Apply RBAC**: Always implement proper Role-Based Access Control after authentication
 - **Least Privilege**: Grant users only the permissions they need to perform their tasks
+
+### Service Accounts
+
+Service accounts are Kubernetes resources used by applications to interact with the Kubernetes API. Unlike user accounts which are for humans, service accounts are specifically designed for pods and applications running inside the cluster.
+
+![Kubernetes Service Accounts](../images/serviceaccount-k8s.png)
+
+#### Managing Service Accounts
+
+**Service Account Creation:**
+```bash
+kubectl create serviceaccount dashboard-sa
+```
+
+**View Service Accounts:**
+```bash
+kubectl get serviceaccount
+```
+
+#### Service Account Token Handling
+
+##### In Kubernetes v1.22 and Earlier:
+
+When a service account is created, Kubernetes automatically:
+1. Creates a token stored in a Secret
+2. Links this Secret to the service account
+
+**To inspect a service account:**
+```bash
+kubectl describe serviceaccount dashboard-sa
+```
+
+![Service Account details](../images/sa-desc.png)
+
+**To view the token:**
+```bash
+kubectl describe secret dashboard-sa-token-kbbdm
+```
+
+![Secret Token](../images/sa-secret-token.png)
+
+This token can be used as a Bearer token in the Authorization header when making API requests to the Kubernetes API.
+
+**Mounting Tokens to Pods:**
+For security, you can mount the service account token as a volume in the pod that needs to use it:
+
+![Service account token mount to pod](../images/sa-token-mount-volume.png)
+
+##### Default Service Account
+
+- Every namespace has a `default` service account created automatically
+- This default service account is mounted to every pod in the namespace unless specified otherwise
+- The default service account has minimal privileges
+
+![Default Service Account Token Mount](../images/serviceaccount-default-secret-token-mount.png)
+
+**To use a custom service account:**
+Specify the `serviceAccountName` in the pod spec:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-pod
+spec:
+  serviceAccountName: dashboard-sa
+  containers:
+  - name: my-container
+    image: nginx
+```
+
+> **Note**: You cannot change a pod's service account after creation, you need to delete the pod and re-create it. However, For pods managed by Deployments, updating the service account will trigger a rollout of new pods.
+
+**To disable automatic token mounting:**
+```yaml
+spec:
+  automountServiceAccountToken: false
+```
+
+##### In Kubernetes v1.24 and Later:
+
+Service accounts no longer automatically create long-lived tokens in Secrets. Instead, Kubernetes introduced the `TokenRequestAPI` that creates tokens with:
+- Specific audience targeting
+- Time-bound validity
+- Object binding
+
+![Secret and token creation 1.24 update](../images/service-account-update-1.24.png)
+
+These tokens have an expiration date:
+![Token details](../images/token-details.png)
+
+**Creating Legacy-style Tokens (if needed):**
+You can still create non-expiring tokens by manually creating a Secret with the appropriate annotation:
+
+```yaml
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/service-account-token
+metadata:
+  name: mysecretname
+  annotations:
+    kubernetes.io/service-account.name: dashboard-sa
+```
+
+![No expire date token](../images/sa-token-no-exp-v.1.24.png)
+
+#### Kubernetes Secret and token Recommendation
+
+![Kubernetes Secret and token Recommendation](../images/k8s-secret-token-recommendation.png)
+
