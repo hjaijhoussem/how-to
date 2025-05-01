@@ -5,6 +5,10 @@
    1. [Authentication in Kubernetes](#authentication-in-kubernetes)
       1. [Users (Admins, Developers)](#users-admins-developers)
       2. [Service Accounts](#service-accounts)
+   2. [TLS](#tls)
+      1. [TLS basics](#tls-basics)
+      2. [TLS in kubernetes](#tls-in-kubernetes)
+
 
 ## CIS Benchmark
 The Center for Internet Security (CIS) Kubernetes Benchmark provides security recommendations for configuring Kubernetes clusters. This guide helps you implement these recommendations using kube-bench.
@@ -304,6 +308,45 @@ spec:
   - name: my-container
     image: nginx
 ```
+#### Assigning Privileges to Service Accounts
+
+To grant a service account specific permissions, you need to create a Role (or ClusterRole) and RoleBinding (or ClusterRoleBinding).
+
+**Example Role and RoleBinding:**
+```yaml
+# File: pod-reader-role.yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: default
+  name: pod-reader
+rules:
+- apiGroups:
+  - ''
+  resources:
+  - pods
+  verbs:
+  - get
+  - watch
+  - list
+---
+# File: dashboard-sa-role-binding.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: read-pods
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: dashboard-sa # Name is case sensitive
+  namespace: default
+roleRef:
+  kind: Role #this must be Role or ClusterRole
+  name: pod-reader # this must match the name of the Role or ClusterRole you wish to bind to
+  apiGroup: rbac.authorization.k8s.io
+```
+
+
 
 > **Note**: You cannot change a pod's service account after creation, you need to delete the pod and re-create it. However, For pods managed by Deployments, updating the service account will trigger a rollout of new pods.
 
@@ -343,4 +386,62 @@ metadata:
 #### Kubernetes Secret and token Recommendation
 
 ![Kubernetes Secret and token Recommendation](../images/k8s-secret-token-recommendation.png)
+
+### TLS
+
+#### TLS basics
+
+- **Symmetric Encryption**: Uses a single key for both encryption and decryption. It's fast and efficient but requires a secure way to share the key between parties.
+
+- **Asymmetric Encryption**: Uses a pair of mathematically related keys (public and private). The public key can be freely shared and is used to encrypt data, while the private key is kept secret and used to decrypt data. It's more secure for key exchange but slower than symmetric encryption.
+
+- **Certificate Authority (CA)**: A trusted entity that issues digital certificates. The CA verifies the identity of certificate requestors and digitally signs their certificates to establish trust.
+
+- **Digital Certificate**: An electronic document that contains a public key and identity information, signed by a CA to verify authenticity.
+
+- **Certificate Signing Request (CSR)**: A message sent to a CA to request certification of a public key.
+
+- **Public Key Infrastructure (PKI)**: The framework of policies, processes, and technologies that enables secure communication through the management of digital certificates and public keys.
+
+- **TLS Handshake**: The process where two parties authenticate each other and establish a secure communication channel.
+
+**How TLS works:**
+1. The server creates a pair of keys (public and private).
+2. The server sends a Certificate Signing Request (CSR) with the public key to a Certificate Authority (CA).
+3. The CA uses its private key to sign the CSR, and sends back a signed certificate to the server.
+4. The server configures the application with both the signed certificate and its private key.
+5. When a client accesses the application, the server presents its certificate containing the public key.
+6. The client verifies the certificate using the CA's public key (pre-installed in browsers/clients).
+7. After verification, the client generates a random symmetric session key.
+8. The client encrypts this session key using the server's public key and sends it to the server.
+9. The server decrypts the message using its private key to obtain the session key.
+10. Both the client and server now use this shared symmetric session key for encrypting subsequent communications.
+
+#### Mutual TLS (mTLS)
+For mutual authentication, the above process includes additional steps:
+1. The client also possesses its own private key and certificate signed by a trusted CA.
+2. After the server presents its certificate, it requests the client's certificate.
+3. The client presents its certificate to the server.
+4. The server verifies the client's certificate using the corresponding CA's public key.
+5. Only if both verifications succeed will the secure connection be established.
+
+Mutual TLS is commonly used in Kubernetes for secure communication between components.
+
+#### Private and Public keys naming convention
+A standardized naming convention is used for private keys, public keys, and certificates:
+
+| File Type | Common Extension | Description |
+|-----------|------------------|-------------|
+| **Private Key** | `.key` | The private portion of a key pair (e.g., `server.key`) that must be kept secure |
+| **CSR** | `.csr` | Certificate Signing Request (e.g., `server.csr`) |
+| **Public Certificate** | `.crt` or `.pem` | The signed certificate (e.g., `server.crt`) containing the public key |
+| **Certificate Bundle** | `.pem` | May contain both certificate and private key |
+
+<p align="center">
+    <img src="../images/prv-public-key-naming.png" alt="Private and Public keys naming convention"/>
+</p>
+
+#### TLS in kubernetes
+
+
 
