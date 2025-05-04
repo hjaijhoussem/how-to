@@ -441,7 +441,192 @@ A standardized naming convention is used for private keys, public keys, and cert
     <img src="../images/prv-public-key-naming.png" alt="Private and Public keys naming convention"/>
 </p>
 
-#### TLS in kubernetes
+### TLS in Kubernetes
 
+#### Kubernetes Components
+- **Kube-apiserver**: The front-end API server for the Kubernetes control plane that validates and processes all cluster requests. All communications between cluster components flow through the apiserver.
+- **ETCD**: Distributed key-value store that serves as Kubernetes' primary data store, holding all cluster configuration data, state, and metadata.
+- **Kube-Controller-Manager**: Runs controller processes that regulate the state of the cluster, ensuring the actual state matches the desired state.
+- **Kube-Scheduler**: Assigns pods to nodes based on resource availability and constraints.
+- **Kubelet**: An agent running on each node that ensures containers are running in pods according to specifications.
+- **Kube-proxy**: Network proxy on each node that maintains network rules and enables pod communication.
 
+<p align="center">
+  <img src="../images/k8s-components.png" alt="Kubernetes components"/>
+</p>
 
+#### Certificate Generation Process
+
+To secure communication between components, we need to generate certificates for each component using a Certificate Authority (CA).
+
+##### 1. Certificate Authority (CA) Setup
+
+```shell
+# Generate CA private key
+openssl genrsa -out ca.key 2048
+
+# Generate Certificate Signing Request (CSR)
+openssl req -new -key ca.key -subj "/CN=KUBERNETES-CA" -out ca.csr
+
+# Self-sign the certificate
+openssl x509 -req -in ca.csr -signkey ca.key -out ca.crt
+```
+
+The CA certificate (ca.crt) will be used to sign all other component certificates.
+
+##### 2. Client Certificates
+
+###### Admin User Certificate
+
+```shell
+# Generate private key
+openssl genrsa -out admin.key 2048
+
+# Generate CSR
+# CN is the username, O specifies the group (system:masters has admin privileges)
+openssl req -new -key admin.key -subj "/CN=kube-admin/O=system:masters" -out admin.csr
+
+# Sign certificate with CA
+openssl x509 -req -in admin.csr -CA ca.crt -CAkey ca.key -out admin.crt
+```
+To use the admin certificates when interacting with the cluster, you need to specify them in your `API requests` or in the `kube-config.yaml` file:
+
+- *API Requests with curl:*
+
+```shell
+curl https://kube-apiserver:6443/api/v1/pods \
+  --key admin.key \
+  --cert admin.crt \
+  --cacert ca.crt
+```
+- *kube-config.yaml:*
+```yaml
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority: ca.crt
+    server: https://kube-apiserver:6443
+    name: kubernetes
+  kind: Config
+users:
+- name: kubernetes-admin
+  user:
+    client-certificate: admin.crt
+    client-key: admin.key
+```
+<p align="center">
+  <img src="../images/kube-admin-cert-config.png" alt="kube admin certificate config"/>
+</p>
+
+###### System Component Certificates
+
+For system components (kube-scheduler, kube-controller-manager, etc.), follow the same process but prefix the CN with "system:":
+
+```shell
+# Example for kube-scheduler
+openssl genrsa -out scheduler.key 2048
+openssl req -new -key scheduler.key -subj "/CN=system:kube-scheduler" -out scheduler.csr
+openssl x509 -req -in scheduler.csr -CA ca.crt -CAkey ca.key -out scheduler.crt
+```
+
+##### 3. Server Certificates
+
+###### ETCD Server
+
+Since ETCD can be deployed across multiple instances as a cluster to ensure high availability, it requires two types of certificates:
+
+1. **Server certificates**: For client-to-server communication
+2. **Peer certificates**: For server-to-server communication within the cluster
+
+Both certificate types must be specified in the `etcd.yaml` configuration file:
+
+```shell
+# Generate etcd server certificates as above
+# Additional peer certificates needed for etcd cluster communication
+```
+
+<p align="center">
+  <img src="../images/etcd-server-cert-conf.png" alt="etcd server certificates config"/>
+</p>
+
+###### Kube-apiserver Certificate
+
+The apiserver needs a certificate that includes all its possible DNS names and IP addresses:
+
+1. Generate private key:
+```shell
+openssl genrsa -out apiserver.key 2048
+```
+
+2. Create `openssl.cnf` file with Subject Alternative Names (SANs):
+```ini
+[req]
+req_extensions = v3_req
+distinguished_name = req_distinguished_name
+
+[v3_req]
+basicConstraints = CA:FALSE
+keyUsage = nonRepudiation
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = kubernetes
+DNS.2 = kubernetes.default
+DNS.3 = kubernetes.default.svc
+DNS.4 = kubernetes.default.svc.cluster.local
+IP.1 = 10.96.0.1
+IP.2 = 172.17.0.87
+```
+
+3. Generate CSR using this config:
+```shell
+openssl req -new -key apiserver.key -subj "/CN=kube-apiserver" -out apiserver.csr --config openssl.cnf
+```
+
+4. Sign the certificate:
+```shell
+openssl x509 -req -in apiserver.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+  -out apiserver.crt -extensions v3_req -extfile openssl.cnf -days 1000
+```
+
+<p align="center">
+  <img src="../images/kubeapi-server-systemd.png" alt="kube-apiserver systemd configuration"/>
+</p>
+
+###### Kubelet Server Certificates
+
+Each node requires both server and client certificates:
+
+**Server Certificate**:
+- Generate a certificate for each node using the node name in the CN
+- Configure in `kubelet-config.yaml`:
+
+```yaml
+kind: KubeletConfiguration
+apiVersion: kubelet.config.k8s.io/v1beta1
+authentication:
+  x509:
+    clientCAFile: "/var/lib/kubernetes/ca.pem"
+  anonymous:
+    mode: Webhook
+clusterDomain: "cluster.local"
+clusterDNS:
+  - "10.32.0.10"
+podCIDR: "${POD_CIDR}"
+resolvConf: "/run/systemd/resolve/resolv.conf"
+runtimeRequestTimeout: "15m"
+tlsCertFile: "/var/lib/kubelet/kubelet-node01.crt"
+tlsPrivateKeyFile: "/var/lib/kubelet/kubelet-node01.key"
+```
+
+<p align="center">
+  <img src="../images/kubelet-server-cert.png" alt="kubelet server cert and config"/>
+</p>
+
+**Client Certificate**:
+- Generate client certificates for each node with naming convention `system:node:<node-name>`
+- Include group `/O=system:nodes` in the CSR
+
+<p align="center">
+  <img src="../images/kubelet-server-client-cert.png" alt="kubelet client certificate"/>
+</p>
